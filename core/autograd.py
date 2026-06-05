@@ -1,54 +1,55 @@
-# Python implementation of autograd first, cpp later
-# NO LIBRARIES OTHER THAN NUMPY
 import numpy as np
-
-def sigmoid(x):
-    return 1.0/ (1.0 + np.exp(-x))
 
 class Value:
     def __init__(self, data, children=(), op=''):
         self.data = data
         self.grad = 0.0
         self._backward = lambda: None
-        self._children = children 
-        
+        self._children = children
+
+    def tanh(self):
+        t = np.tanh(self.data)
+        out = Value(t, (self,), op='tanh')
+        def _backward():
+            self.grad +=(1-t**2) * out.grad
+       
+        out._backward = _backward
+        return out
+
     def __mul__(self, other):
         out = Value(self.data * other.data, (self, other), op='*')
 
         def _backward():
-            # partial of a * b w.r.t. a is b, and vice versa
             self.grad += other.data * out.grad
             other.grad += self.data * out.grad
-
         out._backward = _backward
         return out
+   
     def __add__(self, other):
         out = Value(self.data + other.data, (self, other), op='+')
 
         def _backward():
             self.grad += out.grad
             other.grad += out.grad
-
         out._backward = _backward
         return out
+   
     def __sub__(self, other):
         out = Value(self.data - other.data, (self, other), op='-')
 
         def _backward():
             self.grad += out.grad
-            other.grad -= out.grad
-
+            other.grad -=out.grad
         out._backward = _backward
         return out
-    def __pow__(self, other):
-        out = Value(self.data ** other.data, (self, other), op='**')
-
+   
+    def __pow__(self,):
+        out = Value(self.data ** other, (self,), op='**')
         def _backward():
-            self.grad += other.data * (self.data ** (other.data - 1)) * out.grad
-            other.grad += self.data ** other.data * np.log(self.data) * out.grad
-
+            self.grad += other * (self.data ** (other - 1)) * out.grad
         out._backward = _backward
         return out
+
     def __truediv__(self, other):
         out = Value(self.data / other.data, (self, other), op='/')
 
@@ -58,8 +59,22 @@ class Value:
 
         out._backward = _backward
         return out
+   
+    def backward(self):
+        topo = []
+        visited = set()
 
-    
+        def build_topo(node):
+            if node not in visited:
+                visited.add(node)
+                for child in node._children:
+                    build_topo(child)
+                topo.append(node)
+   
+        build_topo(self)
+        self.grad = 1.0
+        for node in reversed(topo):
+            node._backward()
 
 class Neuron:
     def __init__(self, nin):
